@@ -27,11 +27,13 @@ import de.caritas.cob.messageservice.api.service.LiveEventNotificationService;
 import de.caritas.cob.messageservice.api.service.LogService;
 import de.caritas.cob.messageservice.api.service.MessageMapper;
 import de.caritas.cob.messageservice.api.service.RocketChatService;
+import de.caritas.cob.messageservice.api.service.SessionService;
 import de.caritas.cob.messageservice.api.service.dto.Message;
 import de.caritas.cob.messageservice.api.service.statistics.StatisticsService;
 import de.caritas.cob.messageservice.api.service.statistics.event.CreateMessageStatisticsEvent;
 import de.caritas.cob.messageservice.api.tenant.TenantContext;
 import de.caritas.cob.messageservice.statisticsservice.generated.web.model.UserRole;
+import de.caritas.cob.messageservice.userservice.generated.web.model.SessionUserDTO;
 import java.util.Optional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +58,8 @@ public class Messenger {
   private final @NonNull StatisticsService statisticsService;
   private final @NonNull AuthenticatedUser authenticatedUser;
   private final @NonNull MessageMapper mapper;
+
+  private final @NonNull SessionService sessionService;
 
   @Value("${rocket.systemuser.id}")
   private String rocketChatSystemUserId;
@@ -106,7 +110,26 @@ public class Messenger {
     }
 
     statisticsService.fireEvent(new CreateMessageStatisticsEvent(authenticatedUser.getUserId(),
-        resolveUserRole(authenticatedUser), chatMessage.getRcGroupId(), false));
+        resolveUserRole(authenticatedUser), chatMessage.getRcGroupId(), false, resolveAdviceseekerUserId(chatMessage), TenantContext.getCurrentTenant()));
+  }
+
+  private String resolveAdviceseekerUserId(ChatMessage chatMessage) {
+    if (authenticatedUser.isConsultant()) {
+      de.caritas.cob.messageservice.userservice.generated.web.model.GroupSessionListResponseDTO sessionBelongingToRcGroupId = sessionService.findSessionBelongingToRcGroupId(
+          chatMessage.getRcToken(), chatMessage.getRcGroupId());
+      if (sessionBelongingToRcGroupId != null
+          && sessionBelongingToRcGroupId.getSessions() != null) {
+        var optionalSession = sessionBelongingToRcGroupId.getSessions().stream().findFirst();
+        return optionalSession.isPresent() ? getUserId(optionalSession.get()) : null;
+      }
+    }
+    return null;
+  }
+
+  private String getUserId(
+      de.caritas.cob.messageservice.userservice.generated.web.model.GroupSessionResponseDTO session) {
+    SessionUserDTO user = session.getUser();
+    return user != null ? user.getId() : null;
   }
 
   private UserRole resolveUserRole(AuthenticatedUser authenticatedUser) {
@@ -266,6 +289,7 @@ public class Messenger {
    */
   public MessageResponseDTO postAliasMessage(String rcGroupId, MessageType messageType, String content) {
     AliasMessageDTO aliasMessageDTO = new AliasMessageDTO().messageType(messageType).content(content);
+
     var response = this.rocketChatService.postAliasOnlyMessageAsSystemUser(rcGroupId,
         aliasMessageDTO);
     return mapper.messageResponseOf(response);
