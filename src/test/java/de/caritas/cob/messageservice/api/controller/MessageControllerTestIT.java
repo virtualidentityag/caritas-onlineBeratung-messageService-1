@@ -42,7 +42,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.powermock.reflect.Whitebox.setInternalState;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -65,9 +64,10 @@ import de.caritas.cob.messageservice.api.model.rocket.chat.message.MessagesDTO;
 import de.caritas.cob.messageservice.api.model.rocket.chat.message.UserDTO;
 import de.caritas.cob.messageservice.api.service.DraftMessageService;
 import de.caritas.cob.messageservice.api.service.EncryptionService;
-import de.caritas.cob.messageservice.api.service.LogService;
 import de.caritas.cob.messageservice.api.service.MessageMapper;
 import de.caritas.cob.messageservice.api.service.RocketChatService;
+import de.caritas.cob.messageservice.config.security.AuthorisationService;
+import de.caritas.cob.messageservice.config.security.JwtAuthConverterProperties;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -144,13 +144,13 @@ public class MessageControllerTestIT {
   @SuppressWarnings("unused")
   private MessageMapper messageMapper;
 
-  @Mock
-  private Logger logger;
+  @MockBean
+  private AuthorisationService authorisationService;
 
-  @Before
-  public void setup() {
-    setInternalState(LogService.class, "LOGGER", logger);
-  }
+  @MockBean
+  private JwtAuthConverterProperties jwtAuthConverterProperties;
+
+
 
   /**
    * 400 - Bad Request tests
@@ -404,7 +404,7 @@ public class MessageControllerTestIT {
   }
 
   @Test
-  public void createMessage_Should_LogInternalServerError_When_InternalServerErrorIsThrown()
+  public void createMessage_Should_ReturnInternalServerError_When_InternalServerErrorIsThrown()
       throws Exception {
 
     doThrow(new InternalServerErrorException()).when(messenger)
@@ -415,8 +415,6 @@ public class MessageControllerTestIT {
             .content(VALID_MESSAGE_REQUEST_BODY_WITHOUT_NOTIFICATION)
             .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_JSON))
         .andExpect(status().isInternalServerError());
-
-    verify(logger, atLeastOnce()).error(eq("{}{}"), eq("Internal Server Error: "), anyString());
   }
 
   @Test
